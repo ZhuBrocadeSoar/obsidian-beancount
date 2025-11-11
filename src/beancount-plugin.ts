@@ -78,8 +78,8 @@ export class ObsidianBeancountPlugin
     }
     const res = `
     ${date} * ${message}          
-      ${from} ${parseFloat(amount).toFixed(2)} ${currency}
-      ${to} ${-parseFloat(amount).toFixed(2)} ${currency}
+      ${from} ${-parseFloat(amount).toFixed(2)} ${currency}
+      ${to} ${parseFloat(amount).toFixed(2)} ${currency}
               `.trim();
     if (fileToSave instanceof TFile) {
       const old = await this.app.vault.read(fileToSave);
