@@ -1,6 +1,7 @@
 # obsidian-beancount
 
-[Buy me coffee](https://www.buymeacoffee.com/hamsterbase)
+forked from [hamsterbase/obsidian-beancount](https://github.com/hamsterbase/obsidian-beancount)
+[Buy coffee for hamsterbase](https://www.buymeacoffee.com/hamsterbase)
 
 Use Obsidian on the phone for saving transaction to Beancount file.
 
@@ -21,3 +22,11 @@ Supports parsing Beancount files, retrieving Account, Commodity, Payee.
 e.g. `main.bean`
 
 2. Click wallet icon to save transaction
+
+# why fork
+
+fix some error for my using
+
+# TODO
+
+1. 支持一条交易记录多个帐户
