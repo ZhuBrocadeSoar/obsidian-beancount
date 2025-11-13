@@ -20,7 +20,7 @@ export class ObsidianBeancountPlugin
   async onload(): Promise<void> {
     await this.loadSettings();
     this.addSettingTab(new ObsidianBeancountSettingsTab(this.app, this));
-    this.addRibbonIcon('wallet', 'Save transaction', async () => {
+    this.addRibbonIcon('dollar-sign', 'Save transaction', async () => {
       try {
         const data = await parseBeancountMain(
           this.settings.main,
@@ -146,8 +146,7 @@ export class ObsidianBeancountPlugin
     
     const res = `
 ${date} * ${message}
-${list}
-    `;
+${list}`.trim();
     if (fileToSave instanceof TFile) {
       const old = await this.app.vault.read(fileToSave);
       await this.app.vault.modify(fileToSave, old + '\n' + res);

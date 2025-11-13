@@ -105,7 +105,7 @@ export class TransactionModal extends Modal {
         size: '30'
       },
     });
-    this.bindInputChg({input: payeeInput, key: 'description'});
+    this.bindInputChg({input: despInput, key: 'description'});
   }
 
   private createFlowList() {
