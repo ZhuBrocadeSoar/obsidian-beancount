@@ -7,15 +7,23 @@ export interface IObsidianBeancountPlugin extends Plugin {
   updateSetting(key: keyof IObsidianBeancountSettings, value: string): void;
 }
 
+export interface TransactionFlow {
+  account?: string;
+  amount?: string;
+  currency?: string;
+  cost?: string;
+  costCurrency?: string;
+  convMark?: '' | '@' | '@@';
+  convAmount?: string;
+  convCurrency?: string;
+}
+
 export interface Transaction {
   file?: string;
   date?: string;
-  amount?: string;
-  currency?: string;
-  from?: string;
-  to?: string;
   payee?: string;
   description?: string;
+  flow?: Array<TransactionFlow>
 }
 
 export interface IObsidianBeancountSettings {

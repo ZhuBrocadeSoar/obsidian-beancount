@@ -1,6 +1,6 @@
 import { App, Modal, Notice, Setting, TextComponent } from 'obsidian';
 import { ParseResult } from './parser/parse-bean-count-main';
-import { Transaction } from './plugin';
+import { TransactionFlow, Transaction } from './plugin';
 import { OptionSuggestModal } from './suggest-modal';
 
 export class TransactionModal extends Modal {
@@ -8,129 +8,410 @@ export class TransactionModal extends Modal {
     app: App,
     private parseResult: ParseResult,
     private data: Transaction,
-    private onSave: (data: Transaction) => Promise<void>
+    private onSave: (data: Transaction) => Promise<void>,
   ) {
     super(app);
   }
 
   onOpen() {
+    let { contentEl, modalEl } = this;
+    contentEl.empty();
+    modalEl.style.width = '1000px';
+
+    this.createTitle();
+    this.createFileRow();
+    this.createInstRow();
+    this.createFlowList();
+    this.createFunBtns();
+
+  }
+
+  private createTitle() {
     let { contentEl } = this;
-    contentEl.createEl('h1', { text: 'New transaction' });
-    this.createE({
-      name: 'Beancount File',
+    contentEl.createEl('h1', {
+      attr: {
+        id: 'tm-title',
+      },
+      text: 'New transaction',
+    });
+  }
+
+  private createFileRow() {
+    let { contentEl } = this;
+    const fileRow = contentEl.createDiv({
+      attr: {
+        id: 'tm-file-row',
+      },
+    });
+    // 标签
+    fileRow.createEl('label', { text: 'Beancount File' });
+    // 输入框
+    const input = fileRow.createEl('input', {
+      type: 'text',
+      placeholder: 'Where to save the transaction',
+      value: this.data['file'] || '',
+      attr: {
+        size: '49'
+      },
+    });
+    this.bindInputChg({input, key: 'file'});
+    // 查询按扭
+    const btn = fileRow.createEl('button', { text: '...' });
+    this.bindSearchBtn({
+      btn,
       key: 'file',
       values: this.parseResult.files,
-      // transaction 要储存在哪里
-      placeholder: 'Where to save the transaction',
+      input,
     });
-    this.registerText({
-      name: 'Date',
-      key: 'date',
-      defaultValue: getCurrentData(),
+  }
+
+  /**
+   * Row of
+   * Date Payee Despcription
+   */
+  private createInstRow() {
+    let { contentEl } = this;
+    const instRow = contentEl.createDiv({
+      attr: {
+        id: 'tm-inst-row',
+      },
     });
-    this.registerText({
-      name: 'Amount',
+    // 日期输入框
+    this.data['date'] = getCurrentDate();
+    const dateInput = instRow.createEl('input', {
+      type: 'text',
+      placeholder: 'YYYY-MM-DD',
+      value: this.data['date'],
+      attr: {
+        size: '10',
+      },
+    });
+    this.bindInputChg({input: dateInput, key: 'date'});
+    // 收款人输入框
+    const payeeInput = instRow.createEl('input', {
+      type: 'text',
+      placeholder: 'Payee',
+      value: this.data['payee'],
+      attr: {
+      },
+    });
+    this.bindInputChg({input: payeeInput, key: 'payee'});
+    // 描述输入框
+    const despInput = instRow.createEl('input', {
+      type: 'text',
+      placeholder: 'Description',
+      value: this.data['description'],
+      attr: {
+        size: '30'
+      },
+    });
+    this.bindInputChg({input: payeeInput, key: 'description'});
+  }
+
+  private createFlowList() {
+    let { contentEl } = this;
+    const flNode = contentEl.createDiv({
+      attr: {
+        id: 'tm-flow-list',
+        style: 'padding-left: 30px',
+      },
+    });
+    this.redraw(flNode);
+  }
+
+  private redraw(box: HTMLElement) {
+    box.empty();
+    let flowList: Array<TransactionFlow> = this.data['flow'] || [];
+    if (flowList.length === 1) {
+      flowList.push({});
+    } else if (flowList.length === 0) {
+      flowList.push({});
+      flowList.push({});
+    }
+    this.data['flow'] = flowList;
+    for (let index = 0; index < flowList.length; index++) {
+      this.createFlowRow({box, index});
+    }
+  }
+
+  private createFlowRow(arg: {
+    box: HTMLElement,
+    index: number;
+  }) {
+    let flowList: Array<TransactionFlow> = this.data['flow'] || [];
+    const flowRow = arg.box.createDiv({
+      attr: {
+        id: `tm-flow-list-row-${arg.index}`,
+      },
+    });
+    // Account输入框
+    const accountInput = flowRow.createEl('input', {
+      type: 'text',
+      placeholder: 'Account',
+      value: flowList[arg.index].account,
+    });
+    this.bindInputChgFLV({
+      input: accountInput,
+      index: arg.index,
+      key: 'account',
+    });
+    // Account查询按扭
+    const accountSelectBtn = flowRow.createEl('button', {text: '...'});
+    this.bindSearchBtnFLV({
+      btn: accountSelectBtn,
+      index: arg.index,
+      key: 'account',
+      values: this.parseResult.accounts,
+      input: accountInput,
+    });
+    // Amount输入框
+    const amountInput = flowRow.createEl('input', {
+      type: 'text',
+      placeholder: 'Amount',
+      value: flowList[arg.index].amount,
+      attr: {
+        size: '7',
+      },
+    });
+    this.bindInputChgFLV({
+      input: amountInput,
+      index: arg.index,
       key: 'amount',
     });
-    this.createE({
-      name: 'Currency',
+    // Currency输入框
+    const currencyInput = flowRow.createEl('input', {
+      type: 'text',
+      placeholder: 'Currency',
+      value: flowList[arg.index].currency,
+      attr: {
+        size: '5',
+      },
+    });
+    this.bindInputChgFLV({
+      input: currencyInput,
+      index: arg.index,
+      key: 'currency'
+    });
+    // Currency查询按扭
+    const currencySelectBtn = flowRow.createEl('button', {text: '...'});
+    this.bindSearchBtnFLV({
+      btn: currencySelectBtn,
+      index: arg.index,
       key: 'currency',
       values: this.parseResult.currency,
+      input: currencyInput,
     });
-    this.createE({
-      name: 'From account',
-      key: 'from',
-      values: this.parseResult.accounts,
+    // Cost输入框
+    const costInput = flowRow.createEl('input', {
+      type: 'text',
+      placeholder: 'Cost',
+      value: flowList[arg.index].cost,
+      attr: {
+        size: '7',
+      },
     });
-    this.createE({
-      name: 'To account',
-      key: 'to',
-      values: this.parseResult.accounts,
+    this.bindInputChgFLV({
+      input: costInput,
+      index: arg.index,
+      key: 'cost',
     });
-    this.createE({
-      name: 'Payee',
-      key: 'payee',
-      values: this.parseResult.payee,
+    // Cost Currency输入框
+    const costCurInput = flowRow.createEl('input', {
+      type: 'text',
+      placeholder: 'CostCur',
+      value: flowList[arg.index].costCurrency,
+      attr: {
+        size: '5',
+      },
     });
-    this.registerText({
-      name: 'Description',
-      key: 'description',
+    this.bindInputChgFLV({
+      input: costCurInput,
+      index: arg.index,
+      key: 'costCurrency',
     });
-    new Setting(contentEl).addButton((btn) =>
-      btn
-        .setButtonText('Submit')
-        .setCta()
-        .onClick(() => {
-          this.onSave(this.data)
-            .then(() => {
-              this.close();
-            })
-            .catch((err) => {
-              new Notice(err.message);
-            });
-          this.close();
-        })
-    );
+    // Cost Currency查询按扭
+    const costCurSelectBtn = flowRow.createEl('button', {text: '...'});
+    this.bindSearchBtnFLV({
+      btn: costCurSelectBtn,
+      index: arg.index,
+      key: 'costCurrency',
+      values: this.parseResult.currency,
+      input: costCurInput,
+    });
+    // Conv Mark输入框
+    const cnvMrkInput = flowRow.createEl('input', {
+      type: 'text',
+      placeholder: '@/@@',
+      value: flowList[arg.index].convMark,
+      attr: {
+        size: '3',
+      },
+    });
+    this.bindInputChgFLV({
+      input: cnvMrkInput,
+      index: arg.index,
+      key: 'convMark',
+    });
+    // Conv Mark选择按扭
+    const cnvMrkSelectBtn = flowRow.createEl('button', {text: '...'});
+    this.bindSearchBtnFLV({
+      btn: cnvMrkSelectBtn,
+      index: arg.index,
+      key: 'convMark',
+      values: ['', '@', '@@'],
+      input: cnvMrkInput,
+    });
+    // Conv Amount输入框
+    const cnvAmtInput = flowRow.createEl('input', {
+      type: 'text',
+      placeholder: 'CnvAmt',
+      value: flowList[arg.index].convAmount,
+      attr: {
+        size: '7',
+      },
+    });
+    this.bindInputChgFLV({
+      input: cnvAmtInput,
+      index: arg.index,
+      key: 'convAmount',
+    });
+    // Conv Currency输入框
+    const cnvCurInput = flowRow.createEl('input', {
+      type: 'text',
+      placeholder: 'CnvCur',
+      value: flowList[arg.index].convCurrency,
+      attr: {
+        size: '5',
+      },
+    });
+    this.bindInputChgFLV({
+      input: cnvCurInput,
+      index: arg.index,
+      key: 'convCurrency',
+    });
+    // Conv Currency查询按扭
+    const cnvCurSelectBtn = flowRow.createEl('button', {text: '...'});
+    this.bindSearchBtnFLV({
+      btn:cnvCurSelectBtn,
+      index: arg.index,
+      key: 'convCurrency',
+      values: this.parseResult.currency,
+      input: cnvCurInput,
+    });
+    // 删除按扭
+    if (arg.index >= 2) {
+      const deleteBtn = flowRow.createEl('button', {text: 'Delete'});
+      deleteBtn.addEventListener('click', () => {
+        this.data['flow'] = flowList.filter((item, ii) => ii !== (arg.index - 1));
+        this.redraw(arg.box);
+      });
+    }
   }
 
-  private createE(option: {
-    name: string;
-    key: string;
-    placeholder?: string;
-    values: string[];
-  }) {
-    let component: TextComponent;
-    new Setting(this.contentEl)
-      .setName(option.name)
-      .addText((e) => {
-        component = e;
-        if (option.placeholder) {
-          e.setPlaceholder(option.placeholder);
-        }
-        if (this.data[option.key]) {
-          e.setValue(this.data[option.key]);
-        }
-        component.onChange((value) => {
-          this.data[option.key] = value;
-        });
+  /**
+   * Add Btn、Submit Btn
+  */
+  private createFunBtns() {
+    let { contentEl } = this;
+    const flNode = contentEl.find('#tm-flow-list');
+    const funBtnsRow = contentEl.createDiv({
+      attr: {
+        id: 'tm-fun-btns'
+      }
+    });
+    // 增加行按扭
+    const addLineBtn = funBtnsRow.createEl('button', {text: 'Add a line'});
+    addLineBtn.addEventListener('click', () => {
+      this.data['flow']?.push({});
+      this.redraw(flNode);
+    });
+    // 提交 按扭
+    const submitBtn = funBtnsRow.createEl('button', {text: 'Submit'});
+    submitBtn.addEventListener('click', () => {
+      this.submit();
+    });
+  }
+
+  private submit() {
+    this.onSave(this.data)
+      .then(() => {
+        this.close();
       })
-      .addExtraButton((e) => {
-        e.setIcon('list');
-        e.onClick(() => {
-          new OptionSuggestModal(
-            this.app,
-            option.values.map((o) => ({
-              label: o,
-              value: o,
-            })),
-            (select) => {
-              component.setValue(select.value);
-              this.data[option.key] = select.value;
-            }
-          ).open();
-        });
+      .catch((err) => {
+        new Notice(err.message);
       });
+      this.close();
   }
 
-  private registerText(option: {
-    name: string;
-    placeholder?: string;
+  /**
+   * Rewrite string into this.data when changed
+  */
+  private bindInputChg(arg: {
+    input: HTMLInputElement;
     key: string;
-    defaultValue?: string;
   }) {
-    new Setting(this.contentEl).setName(option.name).addText((e) => {
-      if (option.placeholder) {
-        e.setPlaceholder(option.placeholder);
-      }
-      if (this.data[option.key]) {
-        e.setValue(this.data[option.key]);
-      } else if (option.defaultValue) {
-        e.setValue(option.defaultValue);
-        this.data[option.key] = option.defaultValue;
-      }
-      e.onChange((value) => {
-        this.data[option.key] = value;
-      });
+    arg.input.addEventListener('change', () => {
+      this.data[arg.key] = arg.input.value;
+    });
+  }
+
+  /**
+   * Rewrite string into this.data when changed, flow list version
+  */
+  private bindInputChgFLV(arg: {
+    input: HTMLInputElement;
+    index: number;
+    key: string;
+  }) {
+    arg.input.addEventListener('change', () => {
+      let flowList: Array<TransactionFlow> = this.data['flow'] || [];
+      flowList[arg.index][arg.key] = arg.input.value;
+      this.data['flow'] = flowList;
+    });
+  }
+
+  /**
+   * Binding click event to the button
+  */
+  private bindSearchBtn(arg: {
+    btn: HTMLElement;
+    key: string;
+    values: string[];
+    input: HTMLInputElement;
+  }) {
+    arg.btn.addEventListener('click', () => {
+      new OptionSuggestModal(
+        this.app,
+        arg.values.map((v) => ({ label: v, value: v})),
+        (select) => {
+          arg.input.value = select.value;
+          this.data[arg.key] = select.value;
+        },
+      ).open();
+    });
+  }
+
+  /**
+   * Binding click event to button, flow list version
+  */
+  private bindSearchBtnFLV(arg: {
+    btn: HTMLElement;
+    index: number;
+    key: string;
+    values: string[];
+    input: HTMLInputElement;
+  }) {
+    arg.btn.addEventListener('click', () => {
+      new OptionSuggestModal(
+        this.app,
+        arg.values.map((v) => ({ label: v, value: v})),
+        (select) => {
+          arg.input.value = select.value;
+          let flowList: Array<TransactionFlow> = this.data['flow'] || [];
+          flowList[arg.index][arg.key] = arg.input.value;
+          this.data['flow'] = flowList;
+        },
+      ).open();
     });
   }
 
@@ -140,7 +421,7 @@ export class TransactionModal extends Modal {
   }
 }
 
-function getCurrentData() {
+function getCurrentDate() {
   let currentDate = new Date();
 
   let year = currentDate.getFullYear();
