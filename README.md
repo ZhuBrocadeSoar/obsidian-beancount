@@ -29,4 +29,4 @@ fix some error for my using
 
 # TODO
 
-1. 支持一条交易记录多个帐户
+- [x] 支持一条交易记录多个帐户
