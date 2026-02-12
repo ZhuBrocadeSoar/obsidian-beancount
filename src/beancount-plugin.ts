@@ -30,7 +30,9 @@ export class ObsidianBeancountPlugin
           this.app,
           data,
           this.settings.lastTransaction || {},
-          this.doSave
+          this.doSave,
+          this.readFile,
+          this.settings.template || ''
         ).open();
       } catch (error) {
         new Notice('Error: ' + error);
@@ -47,7 +49,7 @@ export class ObsidianBeancountPlugin
   };
 
   private doSave = async (transaction: Transaction): Promise<void> => {
-    const { file, date, payee, description, flow } = transaction;
+    const { file, date, payee, description, flow, inst } = transaction;
     console.log(transaction)
 
     if (!file) {
@@ -73,80 +75,110 @@ export class ObsidianBeancountPlugin
     // if (!to) {
     //   throw new Error('To account is required');
     // }
-    let message = `"${description}"`;
-    if (payee) {
-      message = `"${payee}" "${description}"`;
-    }
-    // const res = `
-    // ${date} * ${message}          
-    //   ${from} ${-parseFloat(amount).toFixed(2)} ${currency}
-    //   ${to} ${parseFloat(amount).toFixed(2)} ${currency}
-    //           `.trim();
-    let flowList: Array<TransactionFlow> = flow || []
-    if (flowList.length < 2) {
-      throw new Error('Two of line is required');
-    }
-    let countAccount = 0;
-    let countAmount = 0;
-    for (let i = 0; i < flowList.length; i++) {
-      let flow = flowList[i];
-      if (flow.account !== undefined && flow.account !== '') {
-        countAccount += 1;
+
+    const type = inst || 'txn';
+    let res = '';
+
+    if (type === 'balance') {
+      // balance 指令：支持一次多行
+      const allFlows: Array<TransactionFlow> = flow || [];
+      // 过滤掉完全空的行
+      const flowList = allFlows.filter((f) =>
+        f &&
+        ((f.account !== undefined && f.account !== '') ||
+          (f.amount !== undefined && f.amount !== '') ||
+          (f.currency !== undefined && f.currency !== ''))
+      );
+      if (flowList.length === 0) {
+        throw new Error('At least one line is required for balance');
       }
-      if (flow.amount !== undefined  && !isNaN(parseFloat(flow.amount))) {
-        if (flow.currency === undefined || flow.currency === '') {
-          throw new Error('Currency is required');
+      const lines: string[] = [];
+      for (const f of flowList) {
+        if (!f.account) {
+          throw new Error('Account is required for balance');
         }
-        countAmount += 1;
+        if (f.amount === undefined || isNaN(parseFloat(f.amount))) {
+          throw new Error('Amount is required for balance');
+        }
+        if (!f.currency) {
+          throw new Error('Currency is required for balance');
+        }
+        lines.push(`${date} balance ${f.account} ${f.amount} ${f.currency}`);
       }
-    }
-    // console.log(`countAccount=${countAccount}, flowList.length=${flowList.length}`);
-    if (countAccount !== flowList.length) {
-      throw new Error('Account is required for every line');
-    }
-    if (countAmount < flowList.length - 1) {
-      throw new Error('Amount is required');
-    }
-    // 找到最长的账户名长度，用于对齐金额
-    let maxAccountLength = 0;
-    for (let i = 0; i < flowList.length; i++) {
-      let flow = flowList[i];
-      if (flow.account && flow.account.length > maxAccountLength) {
-        maxAccountLength = flow.account.length;
+      res = lines.join('\n');
+    } else {
+      // 普通交易 * 指令
+      let message = `"${description}"`;
+      if (payee) {
+        message = `"${payee}" "${description}"`;
       }
-    }
-    
-    let list = '';
-    for (let i = 0; i < flowList.length; i++) {
-      let flow = flowList[i];
-      let cost = '';
-      if (flow.cost !== undefined && !isNaN(parseFloat(flow.cost))) {
-        if (flow.costCurrency === undefined || flow.costCurrency === '') {
-          throw new Error('Currency for cost part is required');
-        }
-        cost = `{ ${flow.cost} ${flow.costCurrency} }`;
+      let flowList: Array<TransactionFlow> = flow || [];
+      if (flowList.length < 2) {
+        throw new Error('Two of line is required');
       }
-      let conv = '';
-      if (flow.convMark !== undefined && flow.convMark !== '') {
-        if (flow.convMark !== '@' && flow.convMark !== '@@') {
-          throw new Error('Invalid conversion mark, use `@` or `@@`');
+      let countAccount = 0;
+      let countAmount = 0;
+      for (let i = 0; i < flowList.length; i++) {
+        let flow = flowList[i];
+        if (flow.account !== undefined && flow.account !== '') {
+          countAccount += 1;
         }
-        if (flow.convAmount === undefined || isNaN(parseFloat(flow.convAmount))) {
-          throw new Error('Conversion amount is required');
+        if (flow.amount !== undefined  && !isNaN(parseFloat(flow.amount))) {
+          if (flow.currency === undefined || flow.currency === '') {
+            throw new Error('Currency is required');
+          }
+          countAmount += 1;
         }
-        if (flow.convCurrency === undefined || flow.convCurrency === '') {
-          throw new Error('Conversion Currency is required');
-        }
-        conv = `${flow.convMark} ${flow.convAmount} ${flow.convCurrency}`;
       }
-      // 使用 padEnd 对齐账户名，使金额列对齐
-      const paddedAccount = (flow.account || '').padEnd(maxAccountLength);
-      list += `      ${paddedAccount}  ${flow.amount || ''} ${flow.currency || ''} ${cost} ${conv}\n`;
-    }
-    
-    const res = `
+      // console.log(`countAccount=${countAccount}, flowList.length=${flowList.length}`);
+      if (countAccount !== flowList.length) {
+        throw new Error('Account is required for every line');
+      }
+      if (countAmount < flowList.length - 1) {
+        throw new Error('Amount is required');
+      }
+      // 找到最长的账户名长度，用于对齐金额
+      let maxAccountLength = 0;
+      for (let i = 0; i < flowList.length; i++) {
+        let flow = flowList[i];
+        if (flow.account && flow.account.length > maxAccountLength) {
+          maxAccountLength = flow.account.length;
+        }
+      }
+      
+      let list = '';
+      for (let i = 0; i < flowList.length; i++) {
+        let flow = flowList[i];
+        let cost = '';
+        if (flow.cost !== undefined && !isNaN(parseFloat(flow.cost))) {
+          if (flow.costCurrency === undefined || flow.costCurrency === '') {
+            throw new Error('Currency for cost part is required');
+          }
+          cost = `{ ${flow.cost} ${flow.costCurrency} }`;
+        }
+        let conv = '';
+        if (flow.convMark !== undefined && flow.convMark !== '') {
+          if (flow.convMark !== '@' && flow.convMark !== '@@') {
+            throw new Error('Invalid conversion mark, use `@` or `@@`');
+          }
+          if (flow.convAmount === undefined || isNaN(parseFloat(flow.convAmount))) {
+            throw new Error('Conversion amount is required');
+          }
+          if (flow.convCurrency === undefined || flow.convCurrency === '') {
+            throw new Error('Conversion Currency is required');
+          }
+          conv = `${flow.convMark} ${flow.convAmount} ${flow.convCurrency}`;
+        }
+        // 使用 padEnd 对齐账户名，使金额列对齐
+        const paddedAccount = (flow.account || '').padEnd(maxAccountLength);
+        list += `      ${paddedAccount}  ${flow.amount || ''} ${flow.currency || ''} ${cost} ${conv}\n`;
+      }
+      
+      res = `
 ${date} * ${message}
 ${list}`.trim();
+    }
+
     if (fileToSave instanceof TFile) {
       const old = await this.app.vault.read(fileToSave);
       await this.app.vault.modify(fileToSave, old + '\n' + res);

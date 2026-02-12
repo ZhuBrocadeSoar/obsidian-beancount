@@ -1,7 +1,14 @@
 import { App, Modal, Notice, Setting, TextComponent } from 'obsidian';
 import { ParseResult } from './parser/parse-bean-count-main';
-import { TransactionFlow, Transaction } from './plugin';
+import { TransactionFlow, Transaction, InstructionType } from './plugin';
 import { OptionSuggestModal } from './suggest-modal';
+
+interface TemplateDef {
+  name: string;
+  enabled: boolean;
+  type: InstructionType;
+  body: string;
+}
 
 export class TransactionModal extends Modal {
   constructor(
@@ -9,6 +16,8 @@ export class TransactionModal extends Modal {
     private parseResult: ParseResult,
     private data: Transaction,
     private onSave: (data: Transaction) => Promise<void>,
+    private readFile: (name: string) => Promise<string | null>,
+    private templatePath: string,
   ) {
     super(app);
   }
@@ -18,12 +27,65 @@ export class TransactionModal extends Modal {
     contentEl.empty();
     modalEl.style.width = '1000px';
 
+    // 默认指令类型：普通交易
+    if (!this.data['inst']) {
+      this.data['inst'] = 'txn';
+    }
+
     this.createTitle();
+    this.createInstTypeRow();
     this.createFileRow();
     this.createInstRow();
     this.createFlowList();
     this.createFunBtns();
 
+  }
+
+  /**
+   * 指令类型切换：普通交易(*) / balance
+   */
+  private createInstTypeRow() {
+    let { contentEl } = this;
+    const row = contentEl.createDiv({
+      attr: {
+        id: 'tm-inst-type-row',
+        style: 'margin-bottom: 8px;',
+      },
+    });
+    row.createSpan({ text: 'Instruction: ' });
+
+    const txnBtn = row.createEl('button', { text: '*' });
+    const balBtn = row.createEl('button', { text: 'balance' });
+    const tipSpan = row.createSpan({
+      text: '',
+      attr: {
+        style: 'margin-left: 8px; font-size: 0.9em; color: var(--text-muted);',
+      },
+    });
+
+    const updateUI = () => {
+      const type = this.data['inst'] || 'txn';
+      if (type === 'balance') {
+        txnBtn.removeClass('mod-cta');
+        balBtn.addClass('mod-cta');
+        tipSpan.setText('balance：填写每行的 Account / Amount / Currency。每行代表一个账户的余额。');
+      } else {
+        balBtn.removeClass('mod-cta');
+        txnBtn.addClass('mod-cta');
+        tipSpan.setText('普通交易：支持多行借贷。');
+      }
+    };
+
+    txnBtn.addEventListener('click', () => {
+      this.data['inst'] = 'txn';
+      updateUI();
+    });
+    balBtn.addEventListener('click', () => {
+      this.data['inst'] = 'balance';
+      updateUI();
+    });
+
+    updateUI();
   }
 
   private createTitle() {
@@ -77,10 +139,11 @@ export class TransactionModal extends Modal {
       },
     });
     // 日期输入框
-    this.data['date'] = getCurrentDate();
+    if (!this.data['date']) {
+      this.data['date'] = getCurrentDate();
+    }
     const dateInput = instRow.createEl('input', {
-      type: 'text',
-      placeholder: 'YYYY-MM-DD',
+      type: 'date',
       value: this.data['date'],
       attr: {
         size: '10',
@@ -319,6 +382,11 @@ export class TransactionModal extends Modal {
         id: 'tm-fun-btns'
       }
     });
+    // 模板按扭
+    const tmplBtn = funBtnsRow.createEl('button', { text: 'Template' });
+    tmplBtn.addEventListener('click', () => {
+      this.openTemplateSelect();
+    });
     // 增加行按扭
     const addLineBtn = funBtnsRow.createEl('button', {text: 'Add a line'});
     addLineBtn.addEventListener('click', () => {
@@ -330,6 +398,127 @@ export class TransactionModal extends Modal {
     submitBtn.addEventListener('click', () => {
       this.submit();
     });
+  }
+
+  /**
+   * 模板选择入口
+   */
+  private async openTemplateSelect() {
+    if (!this.templatePath) {
+      new Notice('Template file is not set. Please set it in plugin settings.');
+      return;
+    }
+    let content: string | null;
+    try {
+      content = await this.readFile(this.templatePath);
+    } catch (e) {
+      console.error(e);
+      new Notice('Failed to read template file.');
+      return;
+    }
+    if (!content) {
+      new Notice('Template file is empty or cannot be read.');
+      return;
+    }
+    const templates = parseTemplates(content).filter((t) => t.enabled);
+    if (templates.length === 0) {
+      new Notice('No enabled templates found in template file.');
+      return;
+    }
+    new OptionSuggestModal(
+      this.app,
+      templates.map((t, idx) => ({
+        label: t.name,
+        value: String(idx),
+      })),
+      (select) => {
+        const idx = Number(select.value);
+        if (!isNaN(idx) && templates[idx]) {
+          this.applyTemplate(templates[idx]);
+        }
+      },
+    ).open();
+  }
+
+  private applyTemplate(tmpl: TemplateDef) {
+    if (tmpl.type === 'balance') {
+      this.data['inst'] = 'balance';
+      const lines = tmpl.body.split('\n');
+      const flows: Array<TransactionFlow> = [];
+      for (const raw of lines) {
+        const line = raw.trim();
+        if (!line || line.startsWith(';')) continue;
+        const m = line.match(/^\s*(\d{4}-\d{2}-\d{2})\s+balance\s+(\S+)\s+([+-]?\d+(?:\.\d+)?)\s+(\S+)/);
+        if (!m) {
+          continue;
+        }
+        const account = m[2];
+        const amount = m[3];
+        const currency = m[4];
+        flows.push({ account, amount, currency });
+      }
+      if (flows.length === 0) {
+        new Notice('Invalid balance template: no valid balance lines.');
+        return;
+      }
+      this.data['flow'] = flows;
+    } else {
+      // 普通交易模板
+      this.data['inst'] = 'txn';
+      const lines = tmpl.body.split('\n');
+      const header = lines.find((l) => l.trim() && !l.trim().startsWith(';'));
+      if (!header) {
+        new Notice('Invalid transaction template: header is empty.');
+        return;
+      }
+      const hm = header.match(/^\s*(\d{4}-\d{2}-\d{2})\s+\*\s+(.+)$/);
+      if (!hm) {
+        new Notice('Invalid transaction template header.');
+        return;
+      }
+      const meta = hm[2];
+      let payee = '';
+      let description = '';
+      const m2 = meta.match(/"([^"]*)"\s+"([^"]*)"/);
+      if (m2) {
+        payee = m2[1];
+        description = m2[2];
+      } else {
+        const m3 = meta.match(/"([^"]*)"/);
+        if (m3) {
+          description = m3[1];
+        } else {
+          description = meta.trim();
+        }
+      }
+      this.data['payee'] = payee;
+      this.data['description'] = description;
+      // 流水行
+      const flows: Array<TransactionFlow> = [];
+      for (let i = 1; i < lines.length; i++) {
+        const raw = lines[i];
+        const line = raw.trim();
+        if (!line || line.startsWith(';')) continue;
+        const parts = line.split(/\s+/);
+        if (parts.length === 0) continue;
+        const account = parts[0];
+        const amount = parts[1];
+        const currency = parts[2];
+        const flow: TransactionFlow = { account };
+        if (amount !== undefined) {
+          flow.amount = amount;
+        }
+        if (currency !== undefined) {
+          flow.currency = currency;
+        }
+        flows.push(flow);
+      }
+      if (flows.length > 0) {
+        this.data['flow'] = flows;
+      }
+    }
+    // 重新渲染整个窗口
+    this.onOpen();
   }
 
   private submit() {
@@ -433,4 +622,54 @@ function getCurrentDate() {
   let formattedDate = `${year}-${month}-${day}`;
 
   return formattedDate;
+}
+
+/**
+ * 解析模板文件
+ * 模板头格式示例（以分号开头的注释行）：
+ * ; template name=日常支出 enabled=true type=txn
+ * ; template name=期末余额 enabled=1 type=balance
+ * 模板体：紧随其后的若干行 Beancount 片段，直到下一个模板头或文件结束
+ */
+function parseTemplates(content: string): TemplateDef[] {
+  const lines = content.split(/\r?\n/);
+  const result: TemplateDef[] = [];
+  let current: TemplateDef | null = null;
+  for (const raw of lines) {
+    const line = raw;
+    const m = line.match(/^\s*;+\s*template\s+(.*)$/i);
+    if (m) {
+      // 先推入上一个
+      if (current) {
+        current.body = current.body.trimEnd();
+        result.push(current);
+      }
+      const meta = m[1];
+      const fields: Record<string, string> = {};
+      meta.split(/\s+/).forEach((pair) => {
+        const [k, v] = pair.split('=');
+        if (k && v !== undefined) {
+          fields[k.trim().toLowerCase()] = v.trim();
+        }
+      });
+      const name = fields['name'] || 'Unnamed template';
+      const enabledRaw = (fields['enabled'] || 'true').toLowerCase();
+      const enabled = !['0', 'false', 'no', 'off'].includes(enabledRaw);
+      const typeRaw = (fields['type'] || 'txn').toLowerCase();
+      const type: InstructionType = typeRaw === 'balance' ? 'balance' : 'txn';
+      current = {
+        name,
+        enabled,
+        type,
+        body: '',
+      };
+    } else if (current) {
+      current.body += line + '\n';
+    }
+  }
+  if (current) {
+    current.body = current.body.trimEnd();
+    result.push(current);
+  }
+  return result;
 }

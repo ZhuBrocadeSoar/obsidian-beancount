@@ -18,15 +18,19 @@ export interface TransactionFlow {
   convCurrency?: string;
 }
 
+export type InstructionType = 'txn' | 'balance';
+
 export interface Transaction {
   file?: string;
   date?: string;
   payee?: string;
   description?: string;
-  flow?: Array<TransactionFlow>
+  flow?: Array<TransactionFlow>;
+  inst?: InstructionType; // 指令类型：普通交易或 balance 对账
 }
 
 export interface IObsidianBeancountSettings {
   main: string;
   lastTransaction?: Transaction;
+  template?: string; // 模板文件路径
 }
