@@ -11,6 +11,7 @@ interface TemplateDef {
 }
 
 export class TransactionModal extends Modal {
+  private showCostConvert: boolean = false;
   constructor(
     app: App,
     private parseResult: ParseResult,
@@ -173,7 +174,24 @@ export class TransactionModal extends Modal {
 
   private createFlowList() {
     let { contentEl } = this;
-    const flNode = contentEl.createDiv({
+    let flNode: HTMLElement;
+
+    const ctrlRow = contentEl.createDiv({
+      attr: {
+        id: 'tm-flow-ctrl-row',
+        style: 'padding-left: 30px; margin-bottom: 4px;',
+      },
+    });
+    const toggleBtn = ctrlRow.createEl('button', {
+      text: this.showCostConvert ? 'Hide Cost/Convert' : 'Show Cost/Convert',
+    });
+    toggleBtn.addEventListener('click', () => {
+      this.showCostConvert = !this.showCostConvert;
+      toggleBtn.setText(this.showCostConvert ? 'Hide Cost/Convert' : 'Show Cost/Convert');
+      this.redraw(flNode);
+    });
+
+    flNode = contentEl.createDiv({
       attr: {
         id: 'tm-flow-list',
         style: 'padding-left: 30px',
@@ -205,6 +223,7 @@ export class TransactionModal extends Modal {
     const flowRow = arg.box.createDiv({
       attr: {
         id: `tm-flow-list-row-${arg.index}`,
+        style: 'overflow-x: auto; white-space: nowrap; margin-bottom: 4px;',
       },
     });
     // Account输入框
@@ -212,6 +231,9 @@ export class TransactionModal extends Modal {
       type: 'text',
       placeholder: 'Account',
       value: flowList[arg.index].account,
+      attr: {
+        size: '40',
+      },
     });
     this.bindInputChgFLV({
       input: accountInput,
@@ -264,103 +286,110 @@ export class TransactionModal extends Modal {
       values: this.parseResult.currency,
       input: currencyInput,
     });
-    // Cost输入框
-    const costInput = flowRow.createEl('input', {
-      type: 'text',
-      placeholder: 'Cost',
-      value: flowList[arg.index].cost,
-      attr: {
-        size: '7',
-      },
-    });
-    this.bindInputChgFLV({
-      input: costInput,
-      index: arg.index,
-      key: 'cost',
-    });
-    // Cost Currency输入框
-    const costCurInput = flowRow.createEl('input', {
-      type: 'text',
-      placeholder: 'CostCur',
-      value: flowList[arg.index].costCurrency,
-      attr: {
-        size: '5',
-      },
-    });
-    this.bindInputChgFLV({
-      input: costCurInput,
-      index: arg.index,
-      key: 'costCurrency',
-    });
-    // Cost Currency查询按扭
-    const costCurSelectBtn = flowRow.createEl('button', {text: '...'});
-    this.bindSearchBtnFLV({
-      btn: costCurSelectBtn,
-      index: arg.index,
-      key: 'costCurrency',
-      values: this.parseResult.currency,
-      input: costCurInput,
-    });
-    // Conv Mark输入框
-    const cnvMrkInput = flowRow.createEl('input', {
-      type: 'text',
-      placeholder: '@/@@',
-      value: flowList[arg.index].convMark,
-      attr: {
-        size: '3',
-      },
-    });
-    this.bindInputChgFLV({
-      input: cnvMrkInput,
-      index: arg.index,
-      key: 'convMark',
-    });
-    // Conv Mark选择按扭
-    const cnvMrkSelectBtn = flowRow.createEl('button', {text: '...'});
-    this.bindSearchBtnFLV({
-      btn: cnvMrkSelectBtn,
-      index: arg.index,
-      key: 'convMark',
-      values: ['', '@', '@@'],
-      input: cnvMrkInput,
-    });
-    // Conv Amount输入框
-    const cnvAmtInput = flowRow.createEl('input', {
-      type: 'text',
-      placeholder: 'CnvAmt',
-      value: flowList[arg.index].convAmount,
-      attr: {
-        size: '7',
-      },
-    });
-    this.bindInputChgFLV({
-      input: cnvAmtInput,
-      index: arg.index,
-      key: 'convAmount',
-    });
-    // Conv Currency输入框
-    const cnvCurInput = flowRow.createEl('input', {
-      type: 'text',
-      placeholder: 'CnvCur',
-      value: flowList[arg.index].convCurrency,
-      attr: {
-        size: '5',
-      },
-    });
-    this.bindInputChgFLV({
-      input: cnvCurInput,
-      index: arg.index,
-      key: 'convCurrency',
-    });
-    // Conv Currency查询按扭
-    const cnvCurSelectBtn = flowRow.createEl('button', {text: '...'});
-    this.bindSearchBtnFLV({
-      btn:cnvCurSelectBtn,
-      index: arg.index,
-      key: 'convCurrency',
-      values: this.parseResult.currency,
-      input: cnvCurInput,
-    });
+    if (this.showCostConvert) {
+      // Cost输入框
+      const costInput = flowRow.createEl('input', {
+        type: 'text',
+        placeholder: 'Cost',
+        value: flowList[arg.index].cost,
+        attr: {
+          size: '7',
+        },
+      });
+      this.bindInputChgFLV({
+        input: costInput,
+        index: arg.index,
+        key: 'cost',
+      });
+      // Cost Currency输入框
+      const costCurInput = flowRow.createEl('input', {
+        type: 'text',
+        placeholder: 'CostCur',
+        value: flowList[arg.index].costCurrency,
+        attr: {
+          size: '5',
+        },
+      });
+      this.bindInputChgFLV({
+        input: costCurInput,
+        index: arg.index,
+        key: 'costCurrency',
+      });
+      // Cost Currency查询按扭
+      const costCurSelectBtn = flowRow.createEl('button', {text: '...'});
+      this.bindInputChgFLV({
+        input: costCurInput,
+        index: arg.index,
+        key: 'costCurrency',
+      });
+      this.bindSearchBtnFLV({
+        btn: costCurSelectBtn,
+        index: arg.index,
+        key: 'costCurrency',
+        values: this.parseResult.currency,
+        input: costCurInput,
+      });
+      // Conv Mark输入框
+      const cnvMrkInput = flowRow.createEl('input', {
+        type: 'text',
+        placeholder: '@/@@',
+        value: flowList[arg.index].convMark,
+        attr: {
+          size: '3',
+        },
+      });
+      this.bindInputChgFLV({
+        input: cnvMrkInput,
+        index: arg.index,
+        key: 'convMark',
+      });
+      // Conv Mark选择按扭
+      const cnvMrkSelectBtn = flowRow.createEl('button', {text: '...'});
+      this.bindSearchBtnFLV({
+        btn: cnvMrkSelectBtn,
+        index: arg.index,
+        key: 'convMark',
+        values: ['', '@', '@@'],
+        input: cnvMrkInput,
+      });
+      // Conv Amount输入框
+      const cnvAmtInput = flowRow.createEl('input', {
+        type: 'text',
+        placeholder: 'CnvAmt',
+        value: flowList[arg.index].convAmount,
+        attr: {
+          size: '7',
+        },
+      });
+      this.bindInputChgFLV({
+        input: cnvAmtInput,
+        index: arg.index,
+        key: 'convAmount',
+      });
+      // Conv Currency输入框
+      const cnvCurInput = flowRow.createEl('input', {
+        type: 'text',
+        placeholder: 'CnvCur',
+        value: flowList[arg.index].convCurrency,
+        attr: {
+          size: '5',
+        },
+      });
+      this.bindInputChgFLV({
+        input: cnvCurInput,
+        index: arg.index,
+        key: 'convCurrency',
+      });
+      // Conv Currency查询按扭
+      const cnvCurSelectBtn = flowRow.createEl('button', {text: '...'});
+      this.bindSearchBtnFLV({
+        btn:cnvCurSelectBtn,
+        index: arg.index,
+        key: 'convCurrency',
+        values: this.parseResult.currency,
+        input: cnvCurInput,
+      });
+    }
     // 删除按扭
     if (arg.index >= 2) {
       const deleteBtn = flowRow.createEl('button', {text: 'Delete'});
