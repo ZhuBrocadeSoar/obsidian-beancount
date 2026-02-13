@@ -26,10 +26,13 @@ export class ObsidianBeancountPlugin
           this.settings.main,
           this.readFile
         );
+        const lastTxn = this.settings.lastTransaction || {};
+        const { date: _date, ...rest } = lastTxn;
+        const transactionData = { ...rest };
         new TransactionModal(
           this.app,
           data,
-          this.settings.lastTransaction || {},
+          transactionData,
           this.doSave,
           this.readFile,
           this.settings.template || ''
