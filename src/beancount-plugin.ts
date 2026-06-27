@@ -24,7 +24,7 @@ export class ObsidianBeancountPlugin
       try {
         const data = await parseBeancountMain(
           this.settings.main,
-          this.readFile
+          this.readFile,
         );
         const lastTxn = this.settings.lastTransaction || {};
         const { date: _date, ...rest } = lastTxn;
@@ -35,7 +35,7 @@ export class ObsidianBeancountPlugin
           transactionData,
           this.doSave,
           this.readFile,
-          this.settings.template || ''
+          this.settings.template || '',
         ).open();
       } catch (error) {
         new Notice('Error: ' + error);
@@ -53,7 +53,7 @@ export class ObsidianBeancountPlugin
 
   private doSave = async (transaction: Transaction): Promise<void> => {
     const { file, date, payee, description, flow, inst } = transaction;
-    console.log(transaction)
+    console.log(transaction);
 
     if (!file) {
       throw new Error('File is required');
@@ -63,34 +63,47 @@ export class ObsidianBeancountPlugin
     if (!date) {
       throw new Error('Date is required');
     }
-    // if (!amount) {
-    //   throw new Error('Amount is required');
-    // }
-    // if (isNaN(parseFloat(amount))) {
-    //   throw new Error('Amount is not a number');
-    // }
-    // if (!currency) {
-    //   throw new Error('Currency is required');
-    // }
-    // if (!from) {
-    //   throw new Error('From account is required');
-    // }
-    // if (!to) {
-    //   throw new Error('To account is required');
-    // }
 
     const type = inst || 'txn';
     let res = '';
 
-    if (type === 'balance') {
+    if (type === 'price') {
+      // price 指令：DATE price COMMODITY PRICE CURRENCY
+      const allFlows: Array<TransactionFlow> = flow || [];
+      const flowList = allFlows.filter(
+        (f) =>
+          f &&
+          ((f.account !== undefined && f.account !== '') ||
+            (f.amount !== undefined && f.amount !== '') ||
+            (f.currency !== undefined && f.currency !== '')),
+      );
+      if (flowList.length === 0) {
+        throw new Error('At least one price entry is required');
+      }
+      const lines: string[] = [];
+      for (const f of flowList) {
+        if (!f.account) {
+          throw new Error('Commodity is required for price');
+        }
+        if (f.amount === undefined || isNaN(parseFloat(f.amount))) {
+          throw new Error('Price amount is required');
+        }
+        if (!f.currency) {
+          throw new Error('Target currency is required for price');
+        }
+        lines.push(`${date} price ${f.account} ${f.amount} ${f.currency}`);
+      }
+      res = lines.join('\n');
+    } else if (type === 'balance') {
       // balance 指令：支持一次多行
       const allFlows: Array<TransactionFlow> = flow || [];
       // 过滤掉完全空的行
-      const flowList = allFlows.filter((f) =>
-        f &&
-        ((f.account !== undefined && f.account !== '') ||
-          (f.amount !== undefined && f.amount !== '') ||
-          (f.currency !== undefined && f.currency !== ''))
+      const flowList = allFlows.filter(
+        (f) =>
+          f &&
+          ((f.account !== undefined && f.account !== '') ||
+            (f.amount !== undefined && f.amount !== '') ||
+            (f.currency !== undefined && f.currency !== '')),
       );
       if (flowList.length === 0) {
         throw new Error('At least one line is required for balance');
@@ -126,7 +139,7 @@ export class ObsidianBeancountPlugin
         if (flow.account !== undefined && flow.account !== '') {
           countAccount += 1;
         }
-        if (flow.amount !== undefined  && !isNaN(parseFloat(flow.amount))) {
+        if (flow.amount !== undefined && !isNaN(parseFloat(flow.amount))) {
           if (flow.currency === undefined || flow.currency === '') {
             throw new Error('Currency is required');
           }
@@ -148,7 +161,7 @@ export class ObsidianBeancountPlugin
           maxAccountLength = flow.account.length;
         }
       }
-      
+
       let list = '';
       for (let i = 0; i < flowList.length; i++) {
         let flow = flowList[i];
@@ -164,7 +177,10 @@ export class ObsidianBeancountPlugin
           if (flow.convMark !== '@' && flow.convMark !== '@@') {
             throw new Error('Invalid conversion mark, use `@` or `@@`');
           }
-          if (flow.convAmount === undefined || isNaN(parseFloat(flow.convAmount))) {
+          if (
+            flow.convAmount === undefined ||
+            isNaN(parseFloat(flow.convAmount))
+          ) {
             throw new Error('Conversion amount is required');
           }
           if (flow.convCurrency === undefined || flow.convCurrency === '') {
@@ -176,7 +192,7 @@ export class ObsidianBeancountPlugin
         const paddedAccount = (flow.account || '').padEnd(maxAccountLength);
         list += `      ${paddedAccount}  ${flow.amount || ''} ${flow.currency || ''} ${cost} ${conv}\n`;
       }
-      
+
       res = `
 ${date} * ${message}
 ${list}`.trim();

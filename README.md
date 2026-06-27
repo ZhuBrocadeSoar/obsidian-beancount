@@ -70,4 +70,5 @@ fix some error for my using
 - [x] 支持一条交易记录多个帐户
 - [x] 表单优化：日期选择器
 - [x] 支持`balance`指令
+- [x] 支持`price`指令
 - [x] 模板功能

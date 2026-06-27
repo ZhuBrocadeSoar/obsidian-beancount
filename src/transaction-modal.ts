@@ -39,11 +39,10 @@ export class TransactionModal extends Modal {
     this.createInstRow();
     this.createFlowList();
     this.createFunBtns();
-
   }
 
   /**
-   * 指令类型切换：普通交易(*) / balance
+   * 指令类型切换：普通交易(*) / balance / price
    */
   private createInstTypeRow() {
     let { contentEl } = this;
@@ -57,6 +56,7 @@ export class TransactionModal extends Modal {
 
     const txnBtn = row.createEl('button', { text: '*' });
     const balBtn = row.createEl('button', { text: 'balance' });
+    const priceBtn = row.createEl('button', { text: 'price' });
     const tipSpan = row.createSpan({
       text: '',
       attr: {
@@ -66,24 +66,50 @@ export class TransactionModal extends Modal {
 
     const updateUI = () => {
       const type = this.data['inst'] || 'txn';
+      txnBtn.removeClass('mod-cta');
+      balBtn.removeClass('mod-cta');
+      priceBtn.removeClass('mod-cta');
       if (type === 'balance') {
-        txnBtn.removeClass('mod-cta');
         balBtn.addClass('mod-cta');
-        tipSpan.setText('balance：填写每行的 Account / Amount / Currency。每行代表一个账户的余额。');
+        tipSpan.setText(
+          'balance：填写每行的 Account / Amount / Currency。每行代表一个账户的余额。',
+        );
+      } else if (type === 'price') {
+        priceBtn.addClass('mod-cta');
+        tipSpan.setText(
+          'price：填写 Commodity / Price / Target Currency。记录某个时间点的价格。',
+        );
       } else {
-        balBtn.removeClass('mod-cta');
         txnBtn.addClass('mod-cta');
         tipSpan.setText('普通交易：支持多行借贷。');
       }
     };
 
+    const refreshContent = () => {
+      updateUI();
+      // 重新渲染指令行和流水列表
+      const instRow = contentEl.find('#tm-inst-row');
+      if (instRow) {
+        instRow.empty();
+        this.createInstRowContent(instRow);
+      }
+      const flNode = contentEl.find('#tm-flow-list');
+      if (flNode) {
+        this.redraw(flNode);
+      }
+    };
+
     txnBtn.addEventListener('click', () => {
       this.data['inst'] = 'txn';
-      updateUI();
+      refreshContent();
     });
     balBtn.addEventListener('click', () => {
       this.data['inst'] = 'balance';
-      updateUI();
+      refreshContent();
+    });
+    priceBtn.addEventListener('click', () => {
+      this.data['inst'] = 'price';
+      refreshContent();
     });
 
     updateUI();
@@ -114,10 +140,10 @@ export class TransactionModal extends Modal {
       placeholder: 'Where to save the transaction',
       value: this.data['file'] || '',
       attr: {
-        size: '49'
+        size: '49',
       },
     });
-    this.bindInputChg({input, key: 'file'});
+    this.bindInputChg({ input, key: 'file' });
     // 查询按扭
     const btn = fileRow.createEl('button', { text: '...' });
     this.bindSearchBtn({
@@ -139,6 +165,15 @@ export class TransactionModal extends Modal {
         id: 'tm-inst-row',
       },
     });
+    this.createInstRowContent(instRow);
+  }
+
+  /**
+   * 填充 instRow 的内容（可被 refreshContent 重复调用）
+   */
+  private createInstRowContent(instRow: HTMLElement) {
+    const type = this.data['inst'] || 'txn';
+
     // 日期输入框
     if (!this.data['date']) {
       this.data['date'] = getCurrentDate();
@@ -150,26 +185,29 @@ export class TransactionModal extends Modal {
         size: '10',
       },
     });
-    this.bindInputChg({input: dateInput, key: 'date'});
-    // 收款人输入框
-    const payeeInput = instRow.createEl('input', {
-      type: 'text',
-      placeholder: 'Payee',
-      value: this.data['payee'],
-      attr: {
-      },
-    });
-    this.bindInputChg({input: payeeInput, key: 'payee'});
-    // 描述输入框
-    const despInput = instRow.createEl('input', {
-      type: 'text',
-      placeholder: 'Description',
-      value: this.data['description'],
-      attr: {
-        size: '30'
-      },
-    });
-    this.bindInputChg({input: despInput, key: 'description'});
+    this.bindInputChg({ input: dateInput, key: 'date' });
+
+    // price 指令不需要 Payee 和 Description
+    if (type !== 'price') {
+      // 收款人输入框
+      const payeeInput = instRow.createEl('input', {
+        type: 'text',
+        placeholder: 'Payee',
+        value: this.data['payee'],
+        attr: {},
+      });
+      this.bindInputChg({ input: payeeInput, key: 'payee' });
+      // 描述输入框
+      const despInput = instRow.createEl('input', {
+        type: 'text',
+        placeholder: 'Description',
+        value: this.data['description'],
+        attr: {
+          size: '30',
+        },
+      });
+      this.bindInputChg({ input: despInput, key: 'description' });
+    }
   }
 
   private createFlowList() {
@@ -187,7 +225,9 @@ export class TransactionModal extends Modal {
     });
     toggleBtn.addEventListener('click', () => {
       this.showCostConvert = !this.showCostConvert;
-      toggleBtn.setText(this.showCostConvert ? 'Hide Cost/Convert' : 'Show Cost/Convert');
+      toggleBtn.setText(
+        this.showCostConvert ? 'Hide Cost/Convert' : 'Show Cost/Convert',
+      );
       this.redraw(flNode);
     });
 
@@ -203,33 +243,41 @@ export class TransactionModal extends Modal {
   private redraw(box: HTMLElement) {
     box.empty();
     let flowList: Array<TransactionFlow> = this.data['flow'] || [];
-    if (flowList.length === 1) {
-      flowList.push({});
-    } else if (flowList.length === 0) {
-      flowList.push({});
-      flowList.push({});
+
+    const type = this.data['inst'] || 'txn';
+    if (type === 'price') {
+      // price: at least 1 row, no auto-add of second row
+      if (flowList.length === 0) {
+        flowList.push({});
+      }
+    } else {
+      if (flowList.length === 1) {
+        flowList.push({});
+      } else if (flowList.length === 0) {
+        flowList.push({});
+        flowList.push({});
+      }
     }
     this.data['flow'] = flowList;
     for (let index = 0; index < flowList.length; index++) {
-      this.createFlowRow({box, index});
+      this.createFlowRow({ box, index });
     }
   }
 
-  private createFlowRow(arg: {
-    box: HTMLElement,
-    index: number;
-  }) {
+  private createFlowRow(arg: { box: HTMLElement; index: number }) {
     let flowList: Array<TransactionFlow> = this.data['flow'] || [];
+    const type = this.data['inst'] || 'txn';
+    const isPrice = type === 'price';
     const flowRow = arg.box.createDiv({
       attr: {
         id: `tm-flow-list-row-${arg.index}`,
         style: 'overflow-x: auto; white-space: nowrap; margin-bottom: 4px;',
       },
     });
-    // Account输入框
+    // Account/Commodity输入框
     const accountInput = flowRow.createEl('input', {
       type: 'text',
-      placeholder: 'Account',
+      placeholder: isPrice ? 'Commodity' : 'Account',
       value: flowList[arg.index].account,
       attr: {
         size: '40',
@@ -241,7 +289,7 @@ export class TransactionModal extends Modal {
       key: 'account',
     });
     // Account查询按扭
-    const accountSelectBtn = flowRow.createEl('button', {text: '...'});
+    const accountSelectBtn = flowRow.createEl('button', { text: '...' });
     this.bindSearchBtnFLV({
       btn: accountSelectBtn,
       index: arg.index,
@@ -252,7 +300,7 @@ export class TransactionModal extends Modal {
     // Amount输入框
     const amountInput = flowRow.createEl('input', {
       type: 'text',
-      placeholder: 'Amount',
+      placeholder: isPrice ? 'Price' : 'Amount',
       value: flowList[arg.index].amount,
       attr: {
         size: '7',
@@ -266,7 +314,7 @@ export class TransactionModal extends Modal {
     // Currency输入框
     const currencyInput = flowRow.createEl('input', {
       type: 'text',
-      placeholder: 'Currency',
+      placeholder: isPrice ? 'Target Cur' : 'Currency',
       value: flowList[arg.index].currency,
       attr: {
         size: '5',
@@ -275,10 +323,10 @@ export class TransactionModal extends Modal {
     this.bindInputChgFLV({
       input: currencyInput,
       index: arg.index,
-      key: 'currency'
+      key: 'currency',
     });
     // Currency查询按扭
-    const currencySelectBtn = flowRow.createEl('button', {text: '...'});
+    const currencySelectBtn = flowRow.createEl('button', { text: '...' });
     this.bindSearchBtnFLV({
       btn: currencySelectBtn,
       index: arg.index,
@@ -316,7 +364,7 @@ export class TransactionModal extends Modal {
         key: 'costCurrency',
       });
       // Cost Currency查询按扭
-      const costCurSelectBtn = flowRow.createEl('button', {text: '...'});
+      const costCurSelectBtn = flowRow.createEl('button', { text: '...' });
       this.bindInputChgFLV({
         input: costCurInput,
         index: arg.index,
@@ -344,7 +392,7 @@ export class TransactionModal extends Modal {
         key: 'convMark',
       });
       // Conv Mark选择按扭
-      const cnvMrkSelectBtn = flowRow.createEl('button', {text: '...'});
+      const cnvMrkSelectBtn = flowRow.createEl('button', { text: '...' });
       this.bindSearchBtnFLV({
         btn: cnvMrkSelectBtn,
         index: arg.index,
@@ -381,9 +429,9 @@ export class TransactionModal extends Modal {
         key: 'convCurrency',
       });
       // Conv Currency查询按扭
-      const cnvCurSelectBtn = flowRow.createEl('button', {text: '...'});
+      const cnvCurSelectBtn = flowRow.createEl('button', { text: '...' });
       this.bindSearchBtnFLV({
-        btn:cnvCurSelectBtn,
+        btn: cnvCurSelectBtn,
         index: arg.index,
         key: 'convCurrency',
         values: this.parseResult.currency,
@@ -391,10 +439,10 @@ export class TransactionModal extends Modal {
       });
     }
     // 删除按扭
-    if (arg.index >= 2) {
-      const deleteBtn = flowRow.createEl('button', {text: 'Delete'});
+    if (arg.index >= (isPrice ? 1 : 2)) {
+      const deleteBtn = flowRow.createEl('button', { text: 'Delete' });
       deleteBtn.addEventListener('click', () => {
-        this.data['flow'] = flowList.filter((item, ii) => ii !== (arg.index - 1));
+        this.data['flow'] = flowList.filter((item, ii) => ii !== arg.index - 1);
         this.redraw(arg.box);
       });
     }
@@ -402,14 +450,14 @@ export class TransactionModal extends Modal {
 
   /**
    * Add Btn、Submit Btn
-  */
+   */
   private createFunBtns() {
     let { contentEl } = this;
     const flNode = contentEl.find('#tm-flow-list');
     const funBtnsRow = contentEl.createDiv({
       attr: {
-        id: 'tm-fun-btns'
-      }
+        id: 'tm-fun-btns',
+      },
     });
     // 模板按扭
     const tmplBtn = funBtnsRow.createEl('button', { text: 'Template' });
@@ -417,13 +465,13 @@ export class TransactionModal extends Modal {
       this.openTemplateSelect();
     });
     // 增加行按扭
-    const addLineBtn = funBtnsRow.createEl('button', {text: 'Add a line'});
+    const addLineBtn = funBtnsRow.createEl('button', { text: 'Add a line' });
     addLineBtn.addEventListener('click', () => {
       this.data['flow']?.push({});
       this.redraw(flNode);
     });
     // 提交 按扭
-    const submitBtn = funBtnsRow.createEl('button', {text: 'Submit'});
+    const submitBtn = funBtnsRow.createEl('button', { text: 'Submit' });
     submitBtn.addEventListener('click', () => {
       this.submit();
     });
@@ -470,14 +518,37 @@ export class TransactionModal extends Modal {
   }
 
   private applyTemplate(tmpl: TemplateDef) {
-    if (tmpl.type === 'balance') {
+    if (tmpl.type === 'price') {
+      this.data['inst'] = 'price';
+      const lines = tmpl.body.split('\n');
+      const flows: Array<TransactionFlow> = [];
+      for (const raw of lines) {
+        const line = raw.trim();
+        if (!line || line.startsWith(';')) continue;
+        const m = line.match(
+          /^\s*(\d{4}-\d{2}-\d{2})\s+price\s+(\S+)\s+([+-]?\d+(?:\.\d+)?)\s+(\S+)/,
+        );
+        if (!m) continue;
+        const commodity = m[2];
+        const amount = m[3];
+        const currency = m[4];
+        flows.push({ account: commodity, amount, currency });
+      }
+      if (flows.length === 0) {
+        new Notice('Invalid price template: no valid price lines.');
+        return;
+      }
+      this.data['flow'] = flows;
+    } else if (tmpl.type === 'balance') {
       this.data['inst'] = 'balance';
       const lines = tmpl.body.split('\n');
       const flows: Array<TransactionFlow> = [];
       for (const raw of lines) {
         const line = raw.trim();
         if (!line || line.startsWith(';')) continue;
-        const m = line.match(/^\s*(\d{4}-\d{2}-\d{2})\s+balance\s+(\S+)\s+([+-]?\d+(?:\.\d+)?)\s+(\S+)/);
+        const m = line.match(
+          /^\s*(\d{4}-\d{2}-\d{2})\s+balance\s+(\S+)\s+([+-]?\d+(?:\.\d+)?)\s+(\S+)/,
+        );
         if (!m) {
           continue;
         }
@@ -558,16 +629,13 @@ export class TransactionModal extends Modal {
       .catch((err) => {
         new Notice(err.message);
       });
-      this.close();
+    this.close();
   }
 
   /**
    * Rewrite string into this.data when changed
-  */
-  private bindInputChg(arg: {
-    input: HTMLInputElement;
-    key: string;
-  }) {
+   */
+  private bindInputChg(arg: { input: HTMLInputElement; key: string }) {
     arg.input.addEventListener('change', () => {
       this.data[arg.key] = arg.input.value;
     });
@@ -575,7 +643,7 @@ export class TransactionModal extends Modal {
 
   /**
    * Rewrite string into this.data when changed, flow list version
-  */
+   */
   private bindInputChgFLV(arg: {
     input: HTMLInputElement;
     index: number;
@@ -590,7 +658,7 @@ export class TransactionModal extends Modal {
 
   /**
    * Binding click event to the button
-  */
+   */
   private bindSearchBtn(arg: {
     btn: HTMLElement;
     key: string;
@@ -600,7 +668,7 @@ export class TransactionModal extends Modal {
     arg.btn.addEventListener('click', () => {
       new OptionSuggestModal(
         this.app,
-        arg.values.map((v) => ({ label: v, value: v})),
+        arg.values.map((v) => ({ label: v, value: v })),
         (select) => {
           arg.input.value = select.value;
           this.data[arg.key] = select.value;
@@ -611,7 +679,7 @@ export class TransactionModal extends Modal {
 
   /**
    * Binding click event to button, flow list version
-  */
+   */
   private bindSearchBtnFLV(arg: {
     btn: HTMLElement;
     index: number;
@@ -622,7 +690,7 @@ export class TransactionModal extends Modal {
     arg.btn.addEventListener('click', () => {
       new OptionSuggestModal(
         this.app,
-        arg.values.map((v) => ({ label: v, value: v})),
+        arg.values.map((v) => ({ label: v, value: v })),
         (select) => {
           arg.input.value = select.value;
           let flowList: Array<TransactionFlow> = this.data['flow'] || [];
@@ -658,6 +726,7 @@ function getCurrentDate() {
  * 模板头格式示例（以分号开头的注释行）：
  * ; template name=日常支出 enabled=true type=txn
  * ; template name=期末余额 enabled=1 type=balance
+ * ; template name=价格记录 enabled=1 type=price
  * 模板体：紧随其后的若干行 Beancount 片段，直到下一个模板头或文件结束
  */
 function parseTemplates(content: string): TemplateDef[] {
@@ -685,7 +754,12 @@ function parseTemplates(content: string): TemplateDef[] {
       const enabledRaw = (fields['enabled'] || 'true').toLowerCase();
       const enabled = !['0', 'false', 'no', 'off'].includes(enabledRaw);
       const typeRaw = (fields['type'] || 'txn').toLowerCase();
-      const type: InstructionType = typeRaw === 'balance' ? 'balance' : 'txn';
+      const type: InstructionType =
+        typeRaw === 'balance'
+          ? 'balance'
+          : typeRaw === 'price'
+            ? 'price'
+            : 'txn';
       current = {
         name,
         enabled,

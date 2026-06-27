@@ -18,7 +18,7 @@ export interface TransactionFlow {
   convCurrency?: string;
 }
 
-export type InstructionType = 'txn' | 'balance';
+export type InstructionType = 'txn' | 'balance' | 'price';
 
 export interface Transaction {
   file?: string;
@@ -26,7 +26,7 @@ export interface Transaction {
   payee?: string;
   description?: string;
   flow?: Array<TransactionFlow>;
-  inst?: InstructionType; // 指令类型：普通交易或 balance 对账
+  inst?: InstructionType; // 指令类型：普通交易、balance 对账 或 price 价格
 }
 
 export interface IObsidianBeancountSettings {
